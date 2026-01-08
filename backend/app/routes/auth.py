@@ -56,3 +56,32 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
 @router.get("/me", response_model=PersonResponse)
 def get_me(current_user: Person = Depends(get_current_user)):
     return current_user
+
+
+@router.get("/people", response_model=list[PersonResponse])
+def list_people(
+    search: str = "",
+    db: Session = Depends(get_db),
+    current_user: Person = Depends(get_current_user),
+):
+    """List all users, optionally filtered by email/name search."""
+    query = db.query(Person)
+    if search:
+        search_term = f"%{search}%"
+        query = query.filter(
+            (Person.email.ilike(search_term)) | (Person.name.ilike(search_term))
+        )
+    return query.limit(50).all()
+
+
+@router.get("/people/{person_id}", response_model=PersonResponse)
+def get_person(
+    person_id: int,
+    db: Session = Depends(get_db),
+    current_user: Person = Depends(get_current_user),
+):
+    """Get a specific user by ID."""
+    person = db.query(Person).filter(Person.person_id == person_id).first()
+    if not person:
+        raise HTTPException(status_code=404, detail="Person not found")
+    return person

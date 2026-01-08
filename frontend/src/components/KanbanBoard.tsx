@@ -1,16 +1,28 @@
 import { useState, useEffect } from 'react';
-import { DndContext, DragEndEvent, closestCenter } from '@dnd-kit/core';
+import {
+  DndContext,
+  DragEndEvent,
+  DragOverEvent,
+  DragStartEvent,
+  DragOverlay,
+  closestCorners,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
 import { api } from '../api/client';
-import type { Task, TaskStatus, Project, PersonBrief } from '../types';
+import type { Task, TaskStatus, Project, PersonBrief, ProjectWithDetails } from '../types';
 import { KanbanColumn } from './KanbanColumn';
 import { TaskDrawer } from './TaskDrawer';
+import { TaskCard } from './TaskCard';
+import { ProjectSettings } from './ProjectSettings';
 
 const COLUMNS: { status: TaskStatus; title: string }[] = [
-  { status: 'NOT_STARTED', title: 'Not Started' },
+  { status: 'NOT_STARTED', title: 'To Do' },
   { status: 'PLANNING', title: 'Planning' },
-  { status: 'DEVELOPMENT', title: 'Development' },
+  { status: 'DEVELOPMENT', title: 'In Progress' },
   { status: 'TESTING', title: 'Testing' },
-  { status: 'FINISHED', title: 'Finished' },
+  { status: 'FINISHED', title: 'Done' },
 ];
 
 interface Props {
@@ -22,13 +34,24 @@ export function KanbanBoard({ project }: Props) {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [newTaskName, setNewTaskName] = useState('');
+  const [activeTask, setActiveTask] = useState<Task | null>(null);
   const [filters, setFilters] = useState<{
     status?: TaskStatus;
     assignee_id?: number;
     severity?: number;
   }>({});
   const [members, setMembers] = useState<PersonBrief[]>([]);
+  const [projectDetails, setProjectDetails] = useState<ProjectWithDetails | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    })
+  );
 
   useEffect(() => {
     loadTasks();
@@ -47,29 +70,67 @@ export function KanbanBoard({ project }: Props) {
 
   const loadProjectMembers = async () => {
     const projectData = await api.getProject(project.project_id);
+    setProjectDetails(projectData);
     setMembers(projectData.members.map((m) => m.person));
+  };
+
+  const handleDragStart = (event: DragStartEvent) => {
+    const task = tasks.find((t) => t.task_id === event.active.id);
+    if (task) {
+      setActiveTask(task);
+    }
+  };
+
+  const handleDragOver = (event: DragOverEvent) => {
+    const { active, over } = event;
+    if (!over) return;
+
+    const activeTaskId = active.id as number;
+    const overId = over.id;
+
+    const activeTask = tasks.find((t) => t.task_id === activeTaskId);
+    if (!activeTask) return;
+
+    // Check if dropping over a column
+    const overColumn = COLUMNS.find((c) => c.status === overId);
+    if (overColumn && activeTask.status !== overColumn.status) {
+      setTasks((tasks) =>
+        tasks.map((t) =>
+          t.task_id === activeTaskId ? { ...t, status: overColumn.status } : t
+        )
+      );
+    }
   };
 
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
+    setActiveTask(null);
+
     if (!over) return;
 
-    const taskId = Number(active.id);
-    const newStatus = over.id as TaskStatus;
-
+    const taskId = active.id as number;
     const task = tasks.find((t) => t.task_id === taskId);
-    if (!task || task.status === newStatus) return;
+    if (!task) return;
 
-    // Optimistic update
-    setTasks(tasks.map((t) =>
-      t.task_id === taskId ? { ...t, status: newStatus } : t
-    ));
+    // Find the target status
+    let targetStatus: TaskStatus | null = null;
+    const overColumn = COLUMNS.find((c) => c.status === over.id);
+    if (overColumn) {
+      targetStatus = overColumn.status;
+    } else {
+      // Dropped over another task, find its status
+      const overTask = tasks.find((t) => t.task_id === over.id);
+      if (overTask) {
+        targetStatus = overTask.status;
+      }
+    }
 
-    try {
-      await api.updateTask(taskId, { status: newStatus });
-    } catch {
-      // Revert on error
-      loadTasks();
+    if (targetStatus && task.status !== targetStatus) {
+      try {
+        await api.updateTask(taskId, { status: targetStatus });
+      } catch {
+        loadTasks();
+      }
     }
   };
 
@@ -84,6 +145,13 @@ export function KanbanBoard({ project }: Props) {
     setTasks([...tasks, task]);
     setNewTaskName('');
     setShowCreate(false);
+    setSelectedTask(task);
+  };
+
+  const handleTaskClick = (task: Task) => {
+    if (!activeTask) {
+      setSelectedTask(task);
+    }
   };
 
   const handleTaskUpdate = (updatedTask: Task) => {
@@ -101,10 +169,21 @@ export function KanbanBoard({ project }: Props) {
   const getTasksByStatus = (status: TaskStatus) =>
     tasks.filter((t) => t.status === status);
 
+  const clearFilters = () => {
+    setFilters({});
+  };
+
+  const hasFilters = filters.assignee_id || filters.severity;
+
   return (
     <div className="kanban-container">
       <div className="kanban-header">
-        <h1>{project.name}</h1>
+        <div className="kanban-header-left">
+          <h1>{project.name}</h1>
+          {project.description && (
+            <p className="project-description">{project.description}</p>
+          )}
+        </div>
         <div className="kanban-actions">
           <select
             value={filters.assignee_id || ''}
@@ -140,8 +219,17 @@ export function KanbanBoard({ project }: Props) {
             ))}
           </select>
 
+          {hasFilters && (
+            <button className="btn-secondary" onClick={clearFilters}>
+              Clear Filters
+            </button>
+          )}
+
           <button className="btn-primary" onClick={() => setShowCreate(true)}>
-            + New Task
+            + Create Task
+          </button>
+          <button className="btn-secondary" onClick={() => setShowSettings(true)}>
+            Settings
           </button>
         </div>
       </div>
@@ -153,14 +241,14 @@ export function KanbanBoard({ project }: Props) {
             <form onSubmit={handleCreateTask}>
               <input
                 type="text"
-                placeholder="Task name"
+                placeholder="What needs to be done?"
                 value={newTaskName}
                 onChange={(e) => setNewTaskName(e.target.value)}
                 autoFocus
               />
               <div className="form-actions">
-                <button type="submit">Create</button>
-                <button type="button" onClick={() => setShowCreate(false)}>
+                <button type="submit" className="btn-primary">Create</button>
+                <button type="button" className="btn-secondary" onClick={() => setShowCreate(false)}>
                   Cancel
                 </button>
               </div>
@@ -172,7 +260,13 @@ export function KanbanBoard({ project }: Props) {
       {loading ? (
         <div className="loading">Loading tasks...</div>
       ) : (
-        <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCorners}
+          onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
+          onDragEnd={handleDragEnd}
+        >
           <div className="kanban-board">
             {COLUMNS.map((column) => (
               <KanbanColumn
@@ -180,10 +274,19 @@ export function KanbanBoard({ project }: Props) {
                 status={column.status}
                 title={column.title}
                 tasks={getTasksByStatus(column.status)}
-                onTaskClick={setSelectedTask}
+                onTaskClick={handleTaskClick}
               />
             ))}
           </div>
+          <DragOverlay>
+            {activeTask ? (
+              <TaskCard
+                task={activeTask}
+                onClick={() => {}}
+                isDragOverlay
+              />
+            ) : null}
+          </DragOverlay>
         </DndContext>
       )}
 
@@ -194,6 +297,16 @@ export function KanbanBoard({ project }: Props) {
           onClose={() => setSelectedTask(null)}
           onUpdate={handleTaskUpdate}
           onDelete={handleTaskDelete}
+        />
+      )}
+
+      {showSettings && projectDetails && (
+        <ProjectSettings
+          project={projectDetails}
+          onClose={() => setShowSettings(false)}
+          onUpdate={() => {
+            loadProjectMembers();
+          }}
         />
       )}
     </div>

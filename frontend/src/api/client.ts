@@ -20,7 +20,7 @@ async function request<T>(
     (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
   }
 
-  if (!(options.body instanceof FormData)) {
+  if (!(options.body instanceof FormData) && !(options.body instanceof URLSearchParams)) {
     (headers as Record<string, string>)['Content-Type'] = 'application/json';
   }
 
@@ -86,6 +86,19 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ person_id: personId, role }),
     }),
+
+  updateProjectMember: (projectId: number, personId: number, role: string) =>
+    request(`/projects/${projectId}/members/${personId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ role }),
+    }),
+
+  removeProjectMember: (projectId: number, personId: number) =>
+    request(`/projects/${projectId}/members/${personId}`, { method: 'DELETE' }),
+
+  // People
+  listPeople: (search?: string) =>
+    request<import('./client').Person[]>(`/auth/people${search ? `?search=${encodeURIComponent(search)}` : ''}`),
 
   // Teams
   listTeams: () => request<import('./client').Team[]>('/teams'),

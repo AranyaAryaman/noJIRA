@@ -1,39 +1,55 @@
-import { useDraggable } from '@dnd-kit/core';
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import type { Task } from '../types';
 
 interface Props {
   task: Task;
   onClick: () => void;
+  isDragOverlay?: boolean;
 }
 
 const priorityColors: Record<number, string> = {
   1: '#94a3b8',
-  2: '#60a5fa',
+  2: '#0065ff',
   3: '#fbbf24',
   4: '#fb923c',
   5: '#ef4444',
 };
 
-export function TaskCard({ task, onClick }: Props) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+export function TaskCard({ task, onClick, isDragOverlay }: Props) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
     id: task.task_id,
+    data: { task },
   });
 
-  const style = transform
-    ? {
-        transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
-        opacity: isDragging ? 0.5 : 1,
-      }
-    : undefined;
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+    cursor: isDragOverlay ? 'grabbing' : 'grab',
+  };
+
+  const handleClick = (e: React.MouseEvent) => {
+    if (isDragging) return;
+    e.stopPropagation();
+    onClick();
+  };
 
   return (
     <div
       ref={setNodeRef}
       style={style}
-      {...listeners}
+      className={`task-card ${isDragOverlay ? 'dragging' : ''}`}
+      onClick={handleClick}
       {...attributes}
-      className="task-card"
-      onClick={onClick}
+      {...listeners}
     >
       <div className="task-card-header">
         <span
@@ -41,7 +57,7 @@ export function TaskCard({ task, onClick }: Props) {
           style={{ backgroundColor: priorityColors[task.priority] }}
           title={`Priority ${task.priority}`}
         />
-        <span className="task-id">#{task.task_id}</span>
+        <span className="task-id">TASK-{task.task_id}</span>
       </div>
       <h4 className="task-name">{task.name}</h4>
       <div className="task-card-footer">
