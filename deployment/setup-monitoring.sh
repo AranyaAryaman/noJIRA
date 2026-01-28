@@ -45,7 +45,7 @@ if [ $DISK -gt 85 ]; then
 fi
 
 # Check backend health
-if ! curl -f -s http://localhost:8007/api/health > /dev/null 2>&1; then
+if ! curl -f -s http://localhost:9001/api/health > /dev/null 2>&1; then
     echo "$(date): Backend health check FAILED" >> $LOG
     cd /opt/nojira && docker-compose -f docker-compose.prod.yml restart backend
 fi

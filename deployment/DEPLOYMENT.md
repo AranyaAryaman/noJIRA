@@ -5,9 +5,9 @@
 Deploy NOJIRA to EC2 at `ops.hushtalent.io` using Docker Compose.
 
 **Stack:**
-- Frontend: nginx container (serves React build + proxies to backend)
-- Backend: FastAPI container (port 8007)
-- Database: PostgreSQL 15 container (port 5433)
+- Frontend: nginx container on port 9000 (serves React build + proxies to backend)
+- Backend: FastAPI container on port 9001
+- Database: PostgreSQL 15 container on port 9002
 
 **Cost:** ~$1/month (small EBS volume only, using existing EC2)
 
@@ -92,9 +92,9 @@ VITE_API_BASE_URL=https://ops.hushtalent.io
 
 | Port | Service | Access |
 |------|---------|--------|
-| 80 | frontend (nginx) | ALB only |
-| 8007 | backend (FastAPI) | localhost only |
-| 5433 | PostgreSQL | localhost only |
+| 9000 | frontend (nginx) | ALB only |
+| 9001 | backend (FastAPI) | localhost only |
+| 9002 | PostgreSQL | localhost only |
 
 ---
 
@@ -116,9 +116,9 @@ Add listener rule for `ops.hushtalent.io`:
 **Settings:**
 - Name: `nojira-tg`
 - Protocol: HTTP
-- Port: 80
+- Port: 9000
 - Health check path: `/`
-- Register EC2 instance (port 80)
+- Register EC2 instance (port 9000)
 
 ### 3. SSL Certificate
 
@@ -141,7 +141,7 @@ Create A record:
 ### 5. Security Group
 
 Ensure EC2 security group allows:
-- Inbound HTTP (80) from ALB security group
+- Inbound TCP port 9000 from ALB security group
 - Inbound SSH (22) from your IP
 
 ---
@@ -206,11 +206,11 @@ git pull origin main
 
 ```bash
 # Backend
-curl http://localhost:8007/api/health
+curl http://localhost:9001/api/health
 # Expected: {"status":"healthy"}
 
 # Frontend
-curl http://localhost/
+curl http://localhost:9000/
 # Expected: HTML content
 
 # Database
@@ -312,14 +312,14 @@ docker exec -it nojira-db psql -U nojira_user -d nojira
 ### Port Conflicts
 
 ```bash
-# Check what's using port 80
-sudo lsof -i :80
+# Check what's using port 9000
+sudo lsof -i :9000
 
-# Check what's using port 8007
-sudo lsof -i :8007
+# Check what's using port 9001
+sudo lsof -i :9001
 
-# If nginx or other services conflict, stop them:
-sudo systemctl stop nginx
+# Check what's using port 9002
+sudo lsof -i :9002
 ```
 
 ### Permission Issues
@@ -359,7 +359,7 @@ docker logs nojira-frontend --tail=100
 ### Network Security
 - Internal Docker network for container communication
 - Backend and DB only exposed to localhost (127.0.0.1)
-- Frontend exposed on port 80 (via ALB only)
+- Frontend exposed on port 9000 (via ALB only)
 - Security headers in nginx (X-Frame-Options, X-XSS-Protection, etc.)
 
 ### Application Security
@@ -377,7 +377,7 @@ docker logs nojira-frontend --tail=100
 
 ### Infrastructure Security
 - HTTPS via ALB
-- EC2 security group restricts port 80 to ALB
+- EC2 security group restricts port 9000 to ALB
 - SSH key-based authentication
 - Docker socket not exposed
 

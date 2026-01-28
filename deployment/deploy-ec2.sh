@@ -168,7 +168,7 @@ wait_for_health() {
         echo -n "Attempt $attempt/$max_attempts: Checking health... "
 
         # Check if backend is responding
-        if curl -f -s http://localhost:8007/api/health > /dev/null 2>&1; then
+        if curl -f -s http://localhost:9001/api/health > /dev/null 2>&1; then
             echo -e "${GREEN}Backend is healthy!${NC}"
             break
         else
@@ -191,14 +191,14 @@ test_endpoints() {
     print_header "Testing Endpoints"
 
     # Test backend
-    if curl -f -s http://localhost:8007/api/health > /dev/null; then
+    if curl -f -s http://localhost:9001/api/health > /dev/null; then
         print_success "Backend is responding"
     else
         print_error "Backend is not responding"
     fi
 
     # Test frontend
-    if curl -f -s http://localhost/ > /dev/null; then
+    if curl -f -s http://localhost:9000/ > /dev/null; then
         print_success "Frontend is responding"
     else
         print_error "Frontend is not responding"
@@ -238,7 +238,7 @@ show_completion() {
 
     if [ "$public_ip" != "localhost" ]; then
         print_warning "Next steps:"
-        echo "  1. Configure ALB to forward ops.hushtalent.io to this EC2 instance (port 80)"
+        echo "  1. Configure ALB to forward ops.hushtalent.io to this EC2 instance (port 9000)"
         echo "  2. Update Route 53 DNS: ops.hushtalent.io → ALB"
         echo "  3. Request/configure SSL certificate in ACM for ops.hushtalent.io"
         echo "  4. Setup automated backups (run ./setup-backups.sh)"

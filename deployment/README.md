@@ -30,9 +30,9 @@ chmod +x deployment/*.sh
 
 ## What Gets Deployed
 
-- **Frontend**: nginx container on port 80 (accessible via ALB)
-- **Backend**: FastAPI container on port 8007 (localhost only)
-- **Database**: PostgreSQL 15 on port 5433 (localhost only)
+- **Frontend**: nginx container on port 9000 (accessible via ALB)
+- **Backend**: FastAPI container on port 9001 (localhost only)
+- **Database**: PostgreSQL 15 on port 9002 (localhost only)
 
 All services run in Docker with health checks, restart policies, and isolated networking.
 
